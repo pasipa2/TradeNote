@@ -2101,6 +2101,16 @@ export async function useUploadTrades(param99, param0) {
                 const results = await query.first(param99 === "api" ? { useMasterKey: true } : undefined);
                 //console.log(" results "+JSON.stringify(results))
                 if (results) {
+                    // Dedupe on write. The list is append-only and a journal that
+                    // was imported before the fix above already carries repeats;
+                    // without this it would keep saving them back.
+                    const seenAccounts = new Set()
+                    param = (param || []).filter(a => {
+                        const v = a && a.value
+                        if (v == null || seenAccounts.has(v)) return false
+                        seenAccounts.add(v)
+                        return true
+                    })
                     results.set("accounts", param)
                     //console.log("param 2" + JSON.stringify(param2))
                     if (param99 === "api") {
@@ -2140,8 +2150,14 @@ export async function useUploadTrades(param99, param0) {
                     if (!check) {
                         let tempArray = currentUser.value.accounts
                         let temp = {}
-                        temp.value = tradeAccounts[0]
-                        temp.label = tradeAccounts[0]
+                        // Was tradeAccounts[0], which is the account being
+                        // iterated ONLY when there is one of them. With two
+                        // accounts in a journal every import re-added the first
+                        // and never added the second, so the filter accumulated
+                        // one duplicate per import and the second account was
+                        // never selectable.
+                        temp.value = element
+                        temp.label = element
                         tempArray.push(temp)
                         updateTradeAccounts(tempArray, temp.value)
                     }
